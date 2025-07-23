@@ -6,7 +6,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node-dev src/index.ts",
-    "check-env": "ts-node src/check-env.ts"
+    "check-env": "ts-node src/check-env.ts",
+    "postinstall": "npm run build"
   },
   "keywords": [],
   "author": "",
