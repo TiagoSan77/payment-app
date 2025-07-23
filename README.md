@@ -125,7 +125,86 @@ curl -X POST http://localhost:3000/api/create_pix_payment \
 }
 ```
 
-#### 5. Webhook MercadoPago (🌐 Pública)
+#### 5. Consultar Pagamento por ID (🔒 Protegida)
+```bash
+curl -X GET http://localhost:3000/api/payment/12345678 \
+  -H "Authorization: Bearer SEU_ID_TOKEN_JWT"
+```
+
+**Resposta:**
+```json
+{
+  "local": {
+    "_id": "507f1f77bcf86cd799439011",
+    "mercadoPagoId": "12345678",
+    "status": "approved",
+    "transactionAmount": 100.50,
+    "payerEmail": "pagador@exemplo.com",
+    "dateCreated": "2025-01-01T00:00:00.000Z",
+    "dateApproved": "2025-01-01T00:05:00.000Z"
+  },
+  "mercadoPago": {
+    "id": 12345678,
+    "status": "approved",
+    "transaction_amount": 100.50,
+    "description": "Pagamento de teste PIX"
+  },
+  "synchronized": true
+}
+```
+
+#### 6. Listar Pagamentos (🔒 Protegida)
+```bash
+# Listar todos os pagamentos
+curl -X GET http://localhost:3000/api/payments \
+  -H "Authorization: Bearer SEU_ID_TOKEN_JWT"
+
+# Filtrar por email
+curl -X GET "http://localhost:3000/api/payments?email=pagador@exemplo.com" \
+  -H "Authorization: Bearer SEU_ID_TOKEN_JWT"
+
+# Filtrar por status
+curl -X GET "http://localhost:3000/api/payments?status=approved" \
+  -H "Authorization: Bearer SEU_ID_TOKEN_JWT"
+
+# Filtros combinados
+curl -X GET "http://localhost:3000/api/payments?email=pagador@exemplo.com&status=approved" \
+  -H "Authorization: Bearer SEU_ID_TOKEN_JWT"
+```
+
+**Resposta:**
+```json
+{
+  "total": 2,
+  "payments": [
+    {
+      "_id": "507f1f77bcf86cd799439011",
+      "mercadoPagoId": "12345678",
+      "status": "approved",
+      "statusDetail": "accredited",
+      "transactionAmount": 100.50,
+      "description": "Pagamento de teste PIX",
+      "paymentMethodId": "pix",
+      "payerEmail": "pagador@exemplo.com",
+      "dateCreated": "2025-01-01T00:00:00.000Z",
+      "dateApproved": "2025-01-01T00:05:00.000Z",
+      "processedAt": "2025-01-01T00:05:10.000Z"
+    },
+    {
+      "_id": "507f1f77bcf86cd799439012",
+      "mercadoPagoId": "87654321",
+      "status": "pending",
+      "transactionAmount": 50.25,
+      "description": "Outro pagamento",
+      "paymentMethodId": "pix",
+      "payerEmail": "pagador@exemplo.com",
+      "dateCreated": "2025-01-01T01:00:00.000Z"
+    }
+  ]
+}
+```
+
+#### 7. Webhook MercadoPago (🌐 Pública)
 ```bash
 curl -X POST http://localhost:3000/api/webhook \
   -H "Content-Type: application/json" \
@@ -147,8 +226,20 @@ curl -X POST http://localhost:3000/api/webhook \
 
 **Resposta:**
 ```
-Webhook recebido com sucesso
+Webhook processado com sucesso
 ```
+
+### 🔄 Fluxo Completo de Pagamento
+
+1. **Criar pagamento PIX** → `/api/create_pix_payment`
+2. **Cliente escaneia QR Code** (do campo `qr_code_base64`)
+3. **MercadoPago envia webhook** → `/api/webhook` (automático)
+4. **Sistema processa pagamento** baseado no status:
+   - ✅ **approved**: Pagamento confirmado → libera produto/serviço
+   - ⏳ **pending**: Aguardando confirmação
+   - ❌ **rejected**: Pagamento rejeitado
+   - 🚫 **cancelled**: Pagamento cancelado
+5. **Consultar status** → `/api/payment/:id` ou `/api/payments`
 
 ## 🔑 Autenticação
 
@@ -166,20 +257,55 @@ Para rotas protegidas, inclua o header:
 Authorization: Bearer SEU_ID_TOKEN_JWT
 ```
 
-## 📁 Estrutura do Projeto
+## ⚙️ Processamento Automático de Webhooks
+
+Quando o MercadoPago envia um webhook, o sistema automaticamente:
+
+### ✅ **Pagamento Aprovado**
+```
+🔔 Webhook recebido
+📊 Busca detalhes do pagamento
+💾 Salva/atualiza no banco de dados
+🎉 Log: "PAGAMENTO APROVADO! ID: 12345678"
+💰 Log: "Valor: R$ 100.50"
+📧 Log: "Pagador: cliente@email.com"
+✅ Pronto para: enviar email, liberar produto, atualizar pedido
+```
+
+### ⏳ **Pagamento Pendente**
+```
+📋 Salva como pendente no banco
+📬 Pronto para notificar cliente sobre aguardo
+```
+
+### ❌ **Pagamento Rejeitado**
+```
+📄 Registra motivo da rejeição
+📧 Pronto para notificar cliente sobre falha
+```
+
+### 🚫 **Pagamento Cancelado**
+```
+🧹 Registra cancelamento
+� Pronto para liberar reservas/estoque
+```
+
+## �📁 Estrutura do Projeto
 
 ```
 src/
 ├── config/
 │   └── firebase.ts          # Configuração Firebase Admin
 ├── controllers/
-│   ├── Payments.ts          # Controlador de pagamentos
+│   ├── PaymentsNew.ts       # Controlador completo de pagamentos
 │   └── UserController.ts    # Controlador de autenticação
+├── models/
+│   └── Payment.ts           # Model MongoDB para pagamentos
 ├── routes/
 │   ├── authRoutes.ts        # Rotas de autenticação
 │   ├── paymentRoutes.ts     # Rotas de pagamento
 │   └── index.ts             # Agregador de rotas
-└── server.ts                # Servidor principal
+└── index.ts                 # Servidor principal
 ```
 
 ## ⚠️ Observações Importantes
