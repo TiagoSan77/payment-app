@@ -45,6 +45,23 @@ class PixCreate {
         }
       });
 
+      // Salva o mapeamento do pagamento com o e-mail real
+      try {
+        const PaymentUserMap = (await import('../models/PaymentUserMap')).default;
+        // O ID do pagamento pode estar em request.id ou request.body.id dependendo da resposta do SDK
+        const mercadoPagoId = request.id?.toString() || (request as any).body?.id?.toString();
+        if (mercadoPagoId) {
+          await PaymentUserMap.create({
+            mercadoPagoId,
+            email: payer.email
+          });
+        } else {
+          console.error('ID do pagamento não encontrado para mapear PaymentUserMap');
+        }
+      } catch (err) {
+        console.error('Erro ao salvar PaymentUserMap:', err);
+      }
+
       res.json(request);
     } catch (err: any) {
       res.status(500).json({
@@ -211,13 +228,23 @@ class PixCreate {
       // Salvar/atualizar no banco de dados
       await this.savePaymentToDB(payment);
 
-      // Buscar usuário pelo e-mail no MongoDB
+      // Buscar e-mail real do usuário pelo ID do pagamento
+      const PaymentUserMap = (await import('../models/PaymentUserMap')).default;
+      const paymentMap = await PaymentUserMap.findOne({ mercadoPagoId: payment.id.toString() });
+      const emailReal = paymentMap?.email;
+
+      if (!emailReal) {
+        console.warn('E-mail real não encontrado para o pagamento:', payment.id);
+        return;
+      }
+
+      // Buscar usuário pelo e-mail real no MongoDB
       const { User } = await import('../models/UserScheme');
       const Compra = (await import('../models/Compra')).default;
-      const user = await User.findOne({ email: payment.payer?.email });
+      const user = await User.findOne({ email: emailReal });
 
       if (!user) {
-        console.warn('Usuário não encontrado para criar compra:', payment.payer?.email);
+        console.warn('Usuário não encontrado para criar compra:', emailReal);
         return;
       }
 
