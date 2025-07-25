@@ -22,15 +22,29 @@ export class AuthService {
   // Método para usar em rotas Express
   createUser = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { email, password } = req.body;
-      
+      const { email, password, name } = req.body;
+
       if (!email || !password) {
         res.status(400).json({ error: 'Email e senha são obrigatórios' });
         return;
       }
 
+      // Cria usuário no Firebase
       const userRecord = await this.register(email, password);
-      
+
+      // Cria usuário no MongoDB
+      try {
+        const { User } = await import('../models/UserScheme');
+        await User.create({
+          name: name || '',
+          email,
+          password
+        });
+      } catch (mongoErr) {
+        console.error('Erro ao criar usuário no MongoDB:', mongoErr);
+        // Não retorna erro para o cliente se já existir, apenas loga
+      }
+
       res.status(201).json({
         message: 'Usuário criado com sucesso',
         uid: userRecord.uid,

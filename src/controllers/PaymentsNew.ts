@@ -54,6 +54,45 @@ class PixCreate {
     }
   }
 
+  // Forçar sincronização de um pagamento específico
+  public sincronizarPagamento = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      
+      console.log(`🔄 Forçando sincronização do pagamento: ${id}`);
+      
+      // Buscar dados atualizados no MercadoPago
+      const mpPayment = await this.payment.get({ id: parseInt(id) });
+      
+      console.log(`📊 Status atual: ${mpPayment.status}`);
+      
+      // Forçar salvamento no banco local
+      await this.savePaymentToDB(mpPayment);
+      
+      // Buscar do banco local para confirmar
+      const localPayment = await PaymentModel.findOne({ mercadoPagoId: id });
+      
+      res.json({
+        message: '✅ Pagamento sincronizado com sucesso!',
+        local: localPayment,
+        mercadoPago: {
+          id: mpPayment.id,
+          status: mpPayment.status,
+          status_detail: mpPayment.status_detail,
+          transaction_amount: mpPayment.transaction_amount,
+          date_approved: mpPayment.date_approved
+        },
+        synchronized: localPayment?.status === mpPayment.status
+      });
+    } catch (err: any) {
+      console.error('❌ Erro ao sincronizar:', err);
+      res.status(500).json({
+        error: 'Erro ao sincronizar pagamento',
+        details: err.message
+      });
+    }
+  }
+
   // Consultar pagamento por ID
   public consultarPagamento = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -168,20 +207,39 @@ class PixCreate {
     console.log(`✅ PAGAMENTO APROVADO! ID: ${payment.id}`);
     console.log(`💰 Valor: R$ ${payment.transaction_amount}`);
     console.log(`📧 Pagador: ${payment.payer?.email}`);
-    
     try {
       // Salvar/atualizar no banco de dados
       await this.savePaymentToDB(payment);
-      
-      // Implementar suas regras de negócio específicas aqui:
-      console.log('🎉 Iniciando processamento do pagamento aprovado...');
-      
-      // Exemplo de ações que você pode implementar:
-      // await this.sendConfirmationEmail(payment.payer?.email, payment);
-      // await this.releaseProduct(payment.external_reference);
-      // await this.updateOrderStatus(payment.external_reference, 'paid');
-      // await this.notifyOtherSystems(payment);
-      
+
+      // Buscar usuário pelo e-mail no MongoDB
+      const { User } = await import('../models/UserScheme');
+      const Compra = (await import('../models/Compra')).default;
+      const user = await User.findOne({ email: payment.payer?.email });
+
+      if (!user) {
+        console.warn('Usuário não encontrado para criar compra:', payment.payer?.email);
+        return;
+      }
+
+      // Calcular datas
+      const dataPagamento = payment.date_approved ? new Date(payment.date_approved) : new Date();
+      const dataVencimento = new Date(dataPagamento);
+      dataVencimento.setDate(dataVencimento.getDate() + 30);
+
+      // Criar registro de compra
+      const compra = new Compra({
+        userId: user._id,
+        email: user.email,
+        senha: user.password, // cuidado: senha em texto puro, ideal seria não salvar!
+        idPagamento: payment.id.toString(),
+        dataPagamento,
+        dataVencimento,
+        status: 'ativo'
+      });
+      await compra.save();
+      console.log('📝 Compra criada com sucesso para usuário:', user.email);
+
+      // Outras ações de negócio podem ser adicionadas aqui
       console.log('✅ Pagamento processado com sucesso!');
     } catch (error) {
       console.error('❌ Erro ao processar pagamento aprovado:', error);

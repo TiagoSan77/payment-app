@@ -7,6 +7,7 @@ const router = Router();
 // Rotas protegidas para pagamentos (requerem autenticação)
 router.post('/create_pix_payment', authService.verifyToken, cliente.criar);
 router.get('/payment/:id', authService.verifyToken, cliente.consultarPagamento);
+router.post('/payment/:id/sync', authService.verifyToken, cliente.sincronizarPagamento);
 router.get('/payments', authService.verifyToken, cliente.listarPagamentos);
 
 // Webhook público (MercadoPago precisa acessar sem autenticação)

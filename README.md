@@ -241,6 +241,46 @@ Webhook processado com sucesso
    - 🚫 **cancelled**: Pagamento cancelado
 5. **Consultar status** → `/api/payment/:id` ou `/api/payments`
 
+### 📱 Verificação de Status no Frontend
+
+#### **Opção 1: Polling (Simples)**
+```javascript
+// Verificar status a cada 3 segundos
+async function checkPaymentStatus(paymentId, idToken) {
+  const interval = setInterval(async () => {
+    try {
+      const response = await fetch(`/api/payment/${paymentId}`, {
+        headers: { 'Authorization': `Bearer ${idToken}` }
+      });
+      
+      const data = await response.json();
+      
+      if (data.local?.status === 'approved') {
+        console.log('✅ Pagamento aprovado!');
+        clearInterval(interval);
+        // Redirecionar para sucesso
+        window.location.href = '/sucesso';
+      } else if (data.local?.status === 'rejected') {
+        console.log('❌ Pagamento rejeitado');
+        clearInterval(interval);
+        alert('Pagamento rejeitado');
+      }
+    } catch (error) {
+      console.error('Erro:', error);
+    }
+  }, 3000);
+  
+  // Para após 5 minutos
+  setTimeout(() => clearInterval(interval), 300000);
+}
+```
+
+#### **Opção 2: WebSockets (Recomendado para produção)**
+Para notificações em tempo real, considere implementar WebSockets:
+- Cliente conecta via WebSocket após criar pagamento
+- Webhook notifica cliente instantaneamente via WebSocket
+- Elimina necessidade de polling
+
 ## 🔑 Autenticação
 
 ### Fluxo de Autenticação
